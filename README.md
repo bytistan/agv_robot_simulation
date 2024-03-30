@@ -8,13 +8,13 @@ The simulation allows the robot to move in a given environment and perform vario
 1. First, clone the project to your computer:
 
     ```bash
-    git clone https://github.com/kullanici/robot-simulasyonu.git
+    git clone https://github.com/kullanici/hamal-simulation.git
     ```
 
 2. Go to the project directory:
 
     ```bash
-    cd robot-simulasyonu
+    cd hamal-simulation
     ```
 
 3. Install the required Python packages:
