@@ -70,9 +70,9 @@ class Robot(pygame.sprite.Sprite):
         pass 
                             
     def update(self,qr_code,line,load,obstacles):
-        if self.load:
-           self.load.rect.x = self.rect.x + 10 
-           self.load.rect.y = self.rect.y + 10  
+        # if self.load:
+        #    self.load.rect.x = self.rect.x + 10 
+        #    self.load.rect.y = self.rect.y + 10  
 
         self.obstacles_sensor.draw(pygame.display.get_surface())
         self.obstacles_sensor.update()
