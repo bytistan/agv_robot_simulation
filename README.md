@@ -8,7 +8,7 @@ The simulation allows the robot to move in a given environment and perform vario
 1. First, clone the project to your computer:
 
     ```bash
-    git clone https://github.com/ulysses-o/hamal_simulation.git
+    git clone https://github.com/findik-faresi/hamal_simulation.git
     ```
 
 2. Go to the project directory:
