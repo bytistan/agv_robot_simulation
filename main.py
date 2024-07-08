@@ -25,13 +25,13 @@ class Main:
             try:
                 self.clock.tick(fps)
                 self.event()
-                self.screen.fill('white')
+                self.screen.fill("white")
                 self.simulation_controller.run()
                 pygame.display.update()
             except KeyboardInterrupt:
                 print("[-] Simulation DOWN.")
                 sys.exit()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main = Main()
     main.run()

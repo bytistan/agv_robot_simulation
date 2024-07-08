@@ -1,0 +1,270 @@
+import pygame 
+from settings import * 
+from obstacle_sensor import ObstacleSensor
+
+class Robot(pygame.sprite.Sprite):
+    def __init__(self,pos):
+        super().__init__()
+
+        self.image = pygame.Surface((size/2,size/2))
+        self.image.fill("#66d9e8")
+        
+        self.rect = self.image.get_rect(
+            topleft=(pos[0]+(size-size/2)/2,pos[1]+(size-size/2)/2)
+        )
+
+        self.direction = pygame.math.Vector2()
+        self.obstacles_sensor = self.create_obstacles_sensor()
+
+        self.speed = 5
+        self.mission = ["S2","A","S1","C"]
+        
+        self.flag = True
+        self.laser_info = []
+        
+        self.mode = {
+            "line_center":None,
+            "guidance":None,
+            "obstacle_avoider":None
+        } 
+
+        self.step = 0
+        
+        self.data = {
+            "line_status":None,
+            "distance_sensor":None,
+            "qr_code":None,
+            "load":None
+        }
+        
+        self.guidance_flag = True 
+            
+        self.tolerance = 5 
+
+    def qr_code_reader(self,qr_code):
+        for sprite in qr_code.sprites():
+            if sprite.rect.colliderect(self.rect):
+                return sprite
+        
+        return False 
+    
+    def line_reader(self,lines):
+        c = 0
+        for sprite in lines.sprites():
+            if sprite.rect.colliderect(self.rect):
+                c += 1    
+        return c
+
+    def guidance_protocol(self):
+        cor = obj_cordinate.get(self.mission[0])
+        
+        approaching_x = ((self.rect.x - cor[0]) * self.direction.x) > 0 and self.direction.x != 0
+        approaching_y = ((self.rect.y - cor[1]) * self.direction.y) > 0 and self.direction.y != 0
+      
+        target_vertical = -1 if approaching_y > 0 else 1 
+
+        if approaching_y:
+            return [
+                {
+                    "move":{
+                        "x":0,
+                        "y":self.direction.y
+                    },
+                    "to":{
+                        "cor":{
+                            "x":None,
+                            "y":cor[1]
+                        }
+                    },
+                    "completed":False,
+                    "process":False
+                }
+            ] 
+        else: 
+            pass
+        if approaching_x:
+            return [
+                {
+                    "move":{
+                        "x":self.direction.x,
+                        "y":0
+                    },
+                    "to":{
+                        "cor":{
+                            "x":cor[0],
+                            "y":None
+                        }
+                    },
+                    "completed":False,
+                    "process":False
+                },
+                {
+                    "move":{
+                        "x":0,
+                        "y":target_vertical
+                    },
+                    "to":{
+                        "cor":{
+                            "x":None,
+                            "y":cor[1]
+                        }
+                    },
+                    "completed":False,
+                    "process":False
+                }
+            ]
+            
+        else:
+            return [
+                {
+                    "move":{
+                        "x":self.direction.x,
+                        "y":0
+                    },
+                    "to": {
+                        "line":1
+                    },
+                    "completed":False,
+                    "process":False
+                },
+                {
+                    "move":{
+                        "x":0,
+                        "y":-1 if self.rect.y < (width // 2) else  1
+                    },
+                    "to":{
+                        "line":1 
+                    },
+                    "completed":False,
+                    "process":False
+                },
+                {
+                    "move":{
+                        "x":self.direction.x * -1,
+                        "y":0
+                    },
+                    "to":{
+                        "cor":{
+                            "x":cor[0],
+                            "y":None
+                        }
+                    },
+                    "completed":False,
+                    "process":False
+                },
+                {
+                    "move":{
+                        "x":self.direction.x * -1,
+                        "y":0
+                    },
+                    "to":{
+                        "cor":{
+                            "x":cor[0],
+                            "y":None
+                        }
+                    },
+                    "completed":False,
+                    "process":False
+                },
+                {
+                    "move":{
+                        "x":0,
+                        "y":-1 if self.rect.y < (width // 2) else 1 
+                    },
+                    "to":{
+                        "cor":{
+                            "x":None,
+                            "y":cor[1]
+                        }
+                    },
+                    "completed":False,
+                    "process":False
+                }
+            ]
+
+    def find_protocol(self):
+        for m,protocols in self.mode.items():
+            if protocols:
+                for index,protocol in enumerate(protocols): 
+                    if protocol and not protocol.get("completed"):
+                        return protocol,m,index 
+                self.mode[m] = None 
+        return None
+    
+    def do_procotol(self,protocol,m,index,l):
+
+        if not protocol.get("process"):
+            x,y = protcol.get("move")
+            if x and self.direction.x != x: self.direction.x = x
+            if y and self.direction.y != y: self.direction.y = y
+            
+            self.mode[m][index]["process"] = True 
+
+        to = protocol.get("to")
+        cor = to.get("cor")
+        line = to.get("line")
+
+        if cor:
+            if cor.get("x") and self.tolerance + self.rect.x > cor.get("x") > self.rect.x - self.tolerance:
+                self.mode[m][index]["completed"] = True 
+                self.mode[m][index]["process"] = False 
+            if cor.get("y") and self.tolerance + self.rect.y > cor.get("y") > self.rect.y - self.tolerance:
+                self.mode[m][index]["completed"] = True 
+                self.mode[m][index]["process"] = False 
+
+        if line and l > line:
+            self.mode[m][index]["completed"] = True 
+            self.mode[m][index]["process"] = False 
+
+    def create_obstacles_sensor(self):
+        obstacles_sensor = pygame.sprite.Group()
+        obstacles_sensor.add(ObstacleSensor((self.rect.x-5,self.rect.y-5),0))
+        obstacles_sensor.add(ObstacleSensor((self.rect.x+size/2-5,self.rect.y-5),1))
+        obstacles_sensor.add(ObstacleSensor((self.rect.x+size/2-5,self.rect.y+size/2-5),2))
+        obstacles_sensor.add(ObstacleSensor((self.rect.x-5,self.rect.y+size/2-5),3))
+        return obstacles_sensor
+    
+    def appy_speed(self):
+        self.rect.x += self.direction.x * self.speed 
+        self.rect.y += self.direction.y * self.speed 
+
+    def update_tools(self,obstacles):
+        self.laser_info.clear()
+
+        for sprite in self.obstacles_sensor.sprites():
+            f = False
+
+            sprite.rect.x += self.direction.x * self.speed
+            sprite.rect.y += self.direction.y * self.speed 
+
+            for s in sprite.laser.sprites():
+                
+                s.rect.x += self.direction.x * self.speed
+                s.rect.y += self.direction.y * self.speed 
+
+                for obs in obstacles.sprites():
+
+                    if obs.rect.colliderect(s.rect):
+                        if self.flag and ((s.name == 0 and self.direction.y == -1) or (s.name == 2 and self.direction.y == 1)):
+                           f = True 
+                        self.laser_info.append(s.name)
+        return f
+
+    def update(self,qr_code,line,load,obstacles):
+        if self.guidance_flag:
+            self.mode["guidance"] = self.guidance_protocol()
+            self.guidance_flag = False 
+
+        self.obstacles_sensor.draw(pygame.display.get_surface())
+        self.obstacles_sensor.update()
+
+        obs = self.update_tools(obstacles)
+        qr = self.qr_code_reader(qr_code) 
+        l = self.line_reader(line)
+        
+        data = self.find_protocol()
+
+        if data: 
+            self.do_procotol(data[0],data[1],data[2],l)
+
+        self.appy_speed()

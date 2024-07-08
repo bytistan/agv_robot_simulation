@@ -5,8 +5,10 @@ from obstacle_sensor import ObstacleSensor
 class Robot(pygame.sprite.Sprite):
     def __init__(self,pos):
         super().__init__()
+
         self.image = pygame.Surface((size/2,size/2))
         self.image.fill("#66d9e8")
+        
         self.rect = self.image.get_rect(
             topleft=(pos[0]+(size-size/2)/2,pos[1]+(size-size/2)/2)
         )
@@ -20,86 +22,130 @@ class Robot(pygame.sprite.Sprite):
         self.flag = True
         self.laser_info = []
         
-        self.protocol = []
+        self.mode = {
+            "line_center":None,
+            "obstacle_avoider":None
+        } 
+
         self.step = 0
-
-    def line_control(self,line):
-        count = 0 
-
-        for sprite in line.sprites():
-            if sprite.rect.colliderect(self.rect):
-                count += 1 
         
-        return count 
+        self.data = {
+            "line_status":None,
+            "distance_sensor":None,
+            "qr_code":None,
+            "load":None
+        }
+        
+        self.stop = False 
+
+        self.destination_x = False
+        self.destination_y = False
+
+        self.tolerance = 10
 
     def qr_code_reader(self,qr_code):
-        
         for sprite in qr_code.sprites():
             if sprite.rect.colliderect(self.rect):
                 return sprite
         
         return False 
+    
+    def line_reader(self,lines):
+        c = 0
+        for sprite in lines.sprites():
+            if sprite.rect.colliderect(self.rect):
+                c += 1    
+        return c
+
+    def guidance(self,l):
+        cor = obj_cordinate.get(self.mission[0])
+
+        cor_x = cor[0] + (size // 2) + 5 
+        cor_y = cor[1] + (size // 2) + 5 
         
-    def go_target(self,target):
-        target = [target[0] + (size-size/2)/2, target[1] + (size-size/2)/2]
-
-        if self.rect.x > target[0] and self.direction.x != 1:
-            self.direction.y = 0
-            self.direction.x = -1 
-        elif self.rect.x < target[0] and self.direction.x != -1:
-            self.direction.y = 0
-            self.direction.x = 1
-        elif self.rect.y > target[1] and self.direction.y != 1:
-            self.direction.y = -1
-            self.direction.x = 0 
-        elif self.rect.y < target[1] and self.direction.y != -1:
-            self.direction.y = 1
-            self.direction.x = 0
-
-    def on(self,qr_code,line,load):
-        total = self.line_control(line)
-        qr_code = self.qr_code_reader(qr_code)
+        rob_x = self.rect.x + (size // 4)
+        rob_y = self.rect.y + (size // 4)
+       
+        target_vertical = 1 if cor_y > rob_y else -1 
+        target_horizontal = 1 if cor_x > rob_x > 0 else -1 
         
-        if qr_code:
-            if qr_code.name == self.mission[0]:
-                self.mission.pop(0)
+        robot_horizontall_axis = (0 < rob_y < (size // 2)) or (height-(size//2) < rob_y < height)
+        
+        self.destination_x = False
+        self.destination_y = False
 
-        if self.flag and total > 1:
-            self.go_target(obj_cordinate[self.mission[0]])
-        if not self.flag:
-            if self.protocol[self.step][-1]:
-                self.choose_direction()
-            self.controller()
+        if rob_x  < cor_x < rob_x + self.tolerance:
+            self.destination_x = True 
+        
+        if rob_y < cor_y < rob_y + self.tolerance:
+            self.destination_y = True 
+        
+        pygame.draw.circle(pygame.display.get_surface(), (0,255,0), (cor_x, cor_y), 10) 
 
-    def controller(self):
-        if self.step == len(self.protocol) - 1:
-            self.flag = True 
-            self.step = 0
-        if self.protocol[2] and not self.flag:
-            if len(self.laser_info) == self.protocol[self.step][2][0]: 
-                self.protocol[self.step][2].pop(0)
-        if not self.protocol[self.step][2]: self.step += 1
+        if l > 1: 
+            if self.destination_x:
+                self.direction.y = target_vertical
+                self.direction.x = 0
 
-    def choose_direction(self):
-        if self.protocol[self.step][0] == 0:
-            self.direction.x = self.protocol[self.step][1]
-            self.direction.y = 0
-        else:
-            self.direction.y = self.protocol[self.step][0]
-            self.direction.x = 0
+            elif robot_horizontall_axis:
+                self.direction.x = target_horizontal
+                self.direction.y = 0
 
-    def create_protocol(self):
-        self.protocol = [
-            [0,-1,[0],True],
-            [1,self.direction.y,[2,0],True],
-            [0,1,[2],True],
-            [1,self.direction.y,[2],True],
-        ]
+            elif not self.destination_y:
+                self.direction.y = 1 if rob_y > height // 2 else -1  
+                self.direction.x = 0
 
-        self.flag = False  
+    def find_protocol(self):
+        for m,protocols in self.mode.items():
+            if protocols:
+                for index,protocol in enumerate(protocols): 
+                    if protocol and not protocol.get("completed"):
+                        return protocol,m,index 
+                self.mode[m] = None 
+        return None
+    
+    def do_procotol(self,protocol,m,index,l):
+        if not protocol.get("process"):
+            move = protocol.get("move")
+
+            x,y = move.get("x") ,move.get("y")
+            
+            if x and self.direction.x != x: self.direction.x = x
+            if y and self.direction.y != y: self.direction.y = y
+            
+            self.mode[m][index]["process"] = True 
+
+        to = protocol.get("to")
+        cor = to.get("cor")
+        line = to.get("line")
+
+        cor_x = cor.get("x")
+        cor_y = cor.get("y")
+
+        rob_x = self.rect.x
+        rob_y = self.rect.y
+
+        if cor_x and self.direction.x != 0:
+            if rob_x - (size // 4) > cor_x > rob_x - ((size // 2) + (size // 4)):
+                self.mode[m][index]["completed"] = True 
+                self.mode[m][index]["process"] = False 
+                self.mission.pop(0)   
+                self.guidance_flag = True
+
+        if cor_y and self.direction.y != 0:
+            if rob_y - (size // 4) > cor_y > rob_y - ((size // 2) + (size // 4)):
+                self.mode[m][index]["completed"] = True 
+                self.mode[m][index]["process"] = False 
+                self.mission.pop(0)   
+                self.guidance_flag = True
+
+        if line and l > line:
+            self.mode[m][index]["completed"] = True 
+            self.mode[m][index]["process"] = False 
 
     def create_obstacles_sensor(self):
         obstacles_sensor = pygame.sprite.Group()
+        
         obstacles_sensor.add(ObstacleSensor((self.rect.x-5,self.rect.y-5),0))
         obstacles_sensor.add(ObstacleSensor((self.rect.x+size/2-5,self.rect.y-5),1))
         obstacles_sensor.add(ObstacleSensor((self.rect.x+size/2-5,self.rect.y+size/2-5),2))
@@ -114,29 +160,44 @@ class Robot(pygame.sprite.Sprite):
         self.laser_info.clear()
 
         for sprite in self.obstacles_sensor.sprites():
+            f = False
+
             sprite.rect.x += self.direction.x * self.speed
             sprite.rect.y += self.direction.y * self.speed 
+
             for s in sprite.laser.sprites():
+                
                 s.rect.x += self.direction.x * self.speed
                 s.rect.y += self.direction.y * self.speed 
-                for obs in obstacles.sprites():
-                    if obs.rect.colliderect(s.rect):
-                        if self.flag and ((s.name == 0 and self.direction.y == -1) or (s.name == 2 and self.direction.y == 1)):
-                            self.create_protocol()
-                        self.laser_info.append(s.name)
-                            
-    def update(self,qr_code,line,load,obstacles):
-        # if self.load:
-        #    self.load.rect.x = self.rect.x + 10 
-        #    self.load.rect.y = self.rect.y + 10  
 
+                for obs in obstacles.sprites():
+
+                    if obs.rect.colliderect(s.rect):
+                        if ((s.name == 0 and self.direction.y == -1) or (s.name == 2 and self.direction.y == 1)):
+                           f = True 
+                        self.laser_info.append(s.name)
+        return f
+
+    def update(self,qr_code,line,load,obstacles):
         self.obstacles_sensor.draw(pygame.display.get_surface())
         self.obstacles_sensor.update()
-        self.update_tools(obstacles)
 
-        if self.mission:
-            self.on(qr_code,line,load)
-            self.appy_speed()
-        else:
+        if not self.stop:
+            obs = self.update_tools(obstacles)
+            qr = self.qr_code_reader(qr_code) 
+            l = self.line_reader(line)
+
+            if qr and qr.name == self.mission[0] and self.destination_x and self.destination_y:
+                self.mission.pop(0)
+
+            if len(self.mission) > 0:
+                self.guidance(l)
+
+        if len(self.mission) == 0 and not self.stop:
+            self.stop = True 
+        
+        if self.stop:
             self.direction.x = 0
             self.direction.y = 0
+
+        self.appy_speed()
